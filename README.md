@@ -5,8 +5,8 @@
 
 ### Course Instructors:
 
-- Dr. Barbara Kowalcyk - kowalcyk.1@osu.edu
-- Dr. Ewy Mathe - ewy.mathe@osumc.edu
+- Dr. Barbara Kowalcyk - kowalcyk.1@osu.edu; https://u.osu.edu/barbarakowalcyk/
+- Dr. Ewy Mathe - ewy.mathe@osumc.edu; https://u.osu.edu/mathelab/
 
 
 This course is an introduction to principles of data analysis, including data cleaning, quality checking and visualization, statistical analysis and handling large datasets. The programming language used will be R.
