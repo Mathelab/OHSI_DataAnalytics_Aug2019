@@ -1,0 +1,241 @@
+---
+title: "Introduction to murine mouse model of obesity and microbiome data"
+author: "Ewy Mathé"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r,echo=FALSE}
+knitr::opts_chunk$set(message=FALSE,warning=FALSE, 
+                      fig.height=10,fig.width = 12,
+                      fig.fullwidth = TRUE,
+                      echo=TRUE,tidy=TRUE)
+```
+
+
+### Goals:
+1.  Explore the structure of the data
+2.  Assess the quality of the data
+3.  Identify microbes that are different between diet types and/or colonic location
+
+### Requirements:
+1. R or Rstudio
+2. betareg package (install.packages("betareg"))
+
+### Input Data:
+Users can load an Rdata frame which contains two R objects:
+
+1. microbe.otus: a matrix containing proportion values of OTUs (groups of microbes).
+2. sample.meta: annotation (meta-data) of the samples.
+3. microbe.meta: annotation (meta-data) of the microbes.
+
+### Tips:
+* If you forget how a function is used in R, type "?function" to get more information
+* Ask questions!!!
+
+### 1. Explore the data types present in "Microbe_Data.RData"
+
+Let us first load the data:
+
+```{r include=TRUE}	
+load("/Users/math90/Documents/Teaching/Ethiopia/OHSI_DataAnalytics/Data/MurineColonDietStudy/Microbe_Data.RData")
+```
+
+Let's see how big the objects are, and whether names of OTUs and samples are matching in the meta-data and in the proportion data.
+
+``` {r}
+paste("microbe.meta has",nrow(microbe.meta),"rows and", ncol(microbe.meta),"columns")
+paste("microbe.otus has",nrow(microbe.otus),"rows and", ncol(microbe.otus),"columns")
+paste("sample.meta has",nrow(sample.meta),"rows and", ncol(sample.meta),"columns")
+
+head(microbe.meta)
+microbe.otus[1:5,1:5]
+head(sample.meta)
+
+# check that meta-data and proportaion data are matching
+all.equal(as.character(microbe.meta$raw.ids),rownames(microbe.otus))
+all.equal(as.character(sample.meta$ID),colnames(microbe.otus))
+```
+
+
+Let's now explore the meta data for the samples a bit, and see how many mice we have per group:
+
+```{r}
+summary(sample.meta)
+```
+
+Now let us look at how many OTUs we have at each taxonomic level (e.g. Phylum, Class, Order, Family, Genus):
+```{r}
+head(microbe.meta)
+unique(microbe.meta$Phylum)
+paste("There are", length(unique(microbe.meta$Phylum)), "Phyla")
+paste("There are", length(unique(microbe.meta$Class)), "Classes")
+paste("There are", length(unique(microbe.meta$Order)), "Orders")
+paste("There are",length(unique(microbe.meta$Family)), "Families")
+paste("There are",length(unique(microbe.meta$Genus)), "Genuses")
+```
+
+Now we can start looking at the proportions, starting with a boxplot:
+```{r}
+boxplot(microbe.otus, pch=19,cex=0.6,
+        main="Distribution of microbe proportions per sample")
+```
+
+That does not look very informative.  Any ideas why?
+
+```{r}
+boxplot(asinh(microbe.otus), pch=19, cex=0.6,
+        main="Distribution of microbe proportions per sample")
+
+boxplot(asinh(microbe.otus[,1]), pch=10,cex=0.6,
+        main="Distribution of microbe proportions of sample 1")
+hist(asinh(microbe.otus[,1]),breaks=50,
+     main="Distribution of microbe proportions of sample 1")
+```
+
+
+### 2. phyla by dietary group (e.g. initiation diet)
+
+As a first exploration, let us calculate the average of phyla for each dietary group (there are 9).
+
+First, get the indices of the samples for each initation diet group:
+```{r}
+C <- which(sample.meta$Initiation_Diet=="C")
+E <- which(sample.meta$Initiation_Diet=="E")
+H <- which(sample.meta$Initiation_Diet=="H")
+length(C); length(E); length(H)
+table(sample.meta$Initiation_Diet)
+```
+
+Now we can calculate the mean per diet group for each OTU:
+```{r}
+aveC <- aveE <- aveH <- c()
+for (i in 1:nrow(microbe.otus)) {
+  aveC <- c(aveC,mean(microbe.otus[i,C]))
+  aveE <- c(aveE,mean(microbe.otus[i,E]))
+  aveH <- c(aveH,mean(microbe.otus[i,H]))
+}
+names(aveC) <- names(aveE) <- names(aveH) <- rownames(microbe.otus)
+```
+
+We can look to see how these averages are distributed across the 3 groups.
+```{r}
+par(mfrow=c(2,2))
+hist(aveC,main="Averages for control diet", breaks=100)
+hist(aveE,main="Averages for caloried restricted diet", breaks=100)
+hist(aveH,main="Averages for high fat diet",breaks=100)
+```
+
+Discussion: Is this what you expect?
+What are the dominating OTUs in each group?
+
+```{r}
+# top for control
+rownames(microbe.otus)[order(aveC,decreasing=T)[1:5]]
+# top for high fat 
+rownames(microbe.otus)[order(aveH,decreasing=T)[1:5]]
+# top for calorie restricted
+rownames(microbe.otus)[order(aveE,decreasing=T)[1:5]]
+```
+
+Is this what you expect?
+
+```{r}
+top5C <- rownames(microbe.otus)[order(aveC,decreasing=T)[1:5]]
+top5E <- rownames(microbe.otus)[order(aveE,decreasing=T)[1:5]]
+top5H <- rownames(microbe.otus)[order(aveH,decreasing=T)[1:5]]
+
+alltop5 <- unique(c(top5C,top5E,top5H))
+length(alltop5)
+alltop5
+```
+
+The variable "alltop5" represents the unique microbes that have the highest averages within each diet group.  We can now make a data frame of the abundances for these top 5 and plot them as a stacked barplot.
+
+
+```{r}
+mymatrix <- cbind(aveC[alltop5], aveE[alltop5], aveH[alltop5])
+rownames(mymatrix) <- alltop5
+
+par(mfrow=c(1,2))
+barplot(mymatrix, 
+        col=c("red","orange","purple","green","grey"))
+plot(1:20,1:20,type="n", xaxt="n", yaxt="n", xlab="", ylab="", bty="n")
+legend(1,10,alltop5, fill=c("red","orange","purple","green","grey"))
+```
+
+
+
+Is this what you expect?
+
+
+### 3. Identify OTU differences by diet group
+
+According to the paper, ANOVA was applied to look for OTU differences by diet type.  Specifically, parameters for ANOVA included taking into account the fact that sample sizes are unbalanced, and the models were adjusted for phase 1 diet, phase 2 diet, cohort, and colonic segment.  
+
+However, without the count data, this is difficult to do.
+
+Rather, let us run a beta regression model:
+
+```{r}
+library(betareg)
+# Filter OTUs where genera has at > 1% abundance
+maxOTUs <- as.numeric(apply(microbe.otus,1,max))
+keepers <- which (maxOTUs > 0.1)
+length(keepers)
+newmicrobe.otus <- asinh(sqrt(microbe.otus[keepers,]))
+
+# Also check that enough samples (min # in one diet group) have non-zero values
+mycut <- min(table(sample.meta$Initiation_Diet))
+props <- as.numeric(apply(newmicrobe.otus,1,function(x) length(which(x==0))))
+newmicrobe.otus <- newmicrobe.otus[which(props<mycut),]
+
+# Now run regression models:
+EC <- HC <- c()
+for (i in 1:nrow(newmicrobe.otus)) {
+  temp <- newmicrobe.otus[i,] + 1e-10
+  out <-betareg(temp ~ sample.meta$Initiation_Diet + sample.meta$Batch +
+          sample.meta$Progression_Diet, link="logit")
+  EC <- c(EC,summary(out)$coefficients$mean["sample.meta$Initiation_DietE", "Pr(>|z|)"])
+  HC <- c(EC,summary(out)$coefficients$mean["sample.meta$Initiation_DietH", "Pr(>|z|)"])
+}
+
+# Let's plot the p-values:
+par(mfrow=c(1,2))
+hist(EC,breaks=30, main="Distribution of EC p-values")
+hist(HC, breaks=30, main="Distribution of HC p-values")
+```
+
+Now we can adjust for multiple comparisons and see what types of microbes we get as significant:
+
+```{r}
+allp <- c(EC,HC)
+allp.adj=p.adjust(allp)
+
+which(allp.adj<0.1)
+which(allp<0.05)
+
+# Significant microbes different between calorie-restricted and control diets
+rownames(newmicrobe.otus)[intersect(which(allp.adj < 0.1), 1:length(EC))]
+
+# Significant microbes different between calorie-restricted and control diets
+rownames(newmicrobe.otus)[(intersect(which(allp.adj < 0.1),
+                                     length(HC):(length(HC)*2)))-length(HC)]
+
+# Now using a p<0.05 cutoff:
+# Significant microbes different between calorie-restricted and control diets
+rownames(newmicrobe.otus)[intersect(which(allp < 0.05), 1:length(EC))]
+
+# Significant microbes different between calorie-restricted and control diets
+rownames(newmicrobe.otus)[(intersect(which(allp < 0.05),
+                                     length(HC):(length(HC)*2)))-length(HC)]
+
+
+```
+
+
+Printout of session info in RStudio as a good housekeeping practice.
+
+```{r}
+sessionInfo()
+```

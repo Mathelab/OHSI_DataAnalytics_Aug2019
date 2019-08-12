@@ -1,0 +1,362 @@
+---
+title: Introduction to NCI-60 Data
+author: "Ewy Mathé"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r,echo=FALSE}
+knitr::opts_chunk$set(message=FALSE,warning=FALSE, 
+                      fig.height=10,fig.width = 12,
+                      fig.fullwidth = TRUE,
+                      echo=TRUE,tidy=TRUE)
+```
+
+### Goals:
+1.  Explore the structure of the data
+2.  Assess the quality of the data
+3.  Identify metabolites that are different between cancer types or between cell lines with different drug responses.
+
+### Requirements:
+1. R or Rstudio
+2. Packages: 
+	- ggplot2 (to install, type "install.packages("ggplot2")" in R)
+	- robcor (to install, type "install.packages("robcor") in R")
+
+### Input Data:
+Users can load an Rdata frame which contains three R objects:
+
+1. finalmetab: a matrix containing metabolite abundance values.
+2. finalgenes: a matrix containing gene abundance values
+3. finannot: annotation (meta-data) of the samples where the column "cell_line" matches that of the metab matrix.
+
+### Tips:
+* If you forget how a function is used in R, type "?function" to get more information
+* Ask questions!!!
+
+### 1. Explore the data types present in "CleanGeneMetab_NCI_60.Rdata"
+
+In R or Rstudio, load your data (make sure to change yoru directory appropriately to your working directory):
+
+```{r}	
+load("/Users/math90/Documents/Teaching/Ethiopia/OHSI_DataAnalytics/Data/NCI60/CleanGeneMetab_NCI_60.Rdata")
+```
+
+Here are some key functions to explore the types of data you have.
+
+First, look to see what objects you have loaded in your working RStudio environment:
+```{r}
+ls()
+```
+
+You should see 3 objects: finalgenes, finalmetab, finannot.
+
+Now look to see how big these are:
+```{r}
+dim(finalgenes)
+dim(finalmetab)
+dim(finannot)
+```
+
+You can use the function View() to look at your data bt since they are large, let's use functions such as dim() (dimentions), nrow() (number of rows), ncol() (number of columnes), rownames() (names of rows), and colnames() (names of columns):
+```{r}
+dim(finalgenes)
+nrow(finalgenes)
+ncol(finalgenes)
+head(rownames(finalgenes))
+head(colnames(finalgenes))
+```
+
+Discussion: What do you think these objects represent?
+
+Let's take a closer look at the object finannot:
+```{r}
+head(finannot)
+```
+
+How many types of cell lines are there?  How many types of cancers represented?
+```{r}
+table(finannot$cell_line)
+length(unique(finannot$cell_line))
+table(finannot$cancertype)
+```
+
+### 2. Explore the structure of the data
+
+Oftentimes, datasets have missing values.  With this particular dataset, misinv values are imputed by the minimum value.One quick way to check for missing values, is to count the number of times the minumum abundance value appears for a given metabolite.  One could also calculate the standard deviation and perhaps filter out metabolites with low variation.  Let's do the latter here.  (If you have time on your hands, do both!)
+
+Let's take a look at the number of missing values here per sample
+```{r}
+minvals <- c()
+for (i in 1:nrow(finalmetab)) {
+  minvals <- c(minvals, which(finalmetab[i,]==min(finalmetab[i,])))
+}
+hist(minvals)
+paste("There are a total of",ncol(finalmetab),"in my dataset.")
+```
+
+Let's calcualte the standard deviations per sample:
+```{r}
+sds=as.numeric(apply(finalmetab,2,sd))
+
+# Now plot the distribution of standard deviations:
+hist(sds,breaks=1000,main="Distribution of metabolite abundance sds")
+```	
+
+Do you notice any outliers?
+Let's zoom in a little:
+```{r}
+hist(sds,breaks=1000,main="Distribution of metabolite abundance sds",xlim=c(0,10))
+```
+
+Do you notice more outliers?  What metabolites could you remove from further analysis?  How many are there?  What metabolite has a very high standard deviation?
+
+```{r}
+bads=c(which(sds==0),which(sds>15))
+length(bads)
+hist(sds[-bads])
+colnames(finalmetab)[which(sds>=10)]
+```
+
+Save original and filter out metabolites 
+```{r}
+metab=finalmetab
+finalmetab=metab[,-bads]
+dim(finalmetab)
+dim(metab)
+```
+
+### 2. Assess the quality of the data
+
+Look at the distsribution of metabolite abundances across each sample using a simple boxplot**:
+```{r}
+boxplot(as.data.frame(t(metab)),pch=19)
+```
+
+
+Does the data need to be transformed? Try this:
+```{r}
+mycol=c(rep("slategrey",5),
+rep("seagreen4",6),rep("lightskyblue",7),rep("blue",6),
+rep("lightcoral",8),rep("indianred4",9),rep("purple",7),rep("green",7),
+rep("orange",2))
+	
+boxplot(as.data.frame(t(log2(finalmetab))),pch=19,
+	main="Distribution of Metabolites Per Sample",names=F,col=mycol,
+	ylab="log2(Normalized metabolite abundances)",ylim=c(-10,10))
+		
+text(x =  seq_along(rownames(finalmetab)), y=par("usr")[3] - 0.5, srt = 45, adj = 1,
+  	labels = rownames(finalmetab), xpd = TRUE, cex=0.6)
+legend(3,10,legend=unique(finannot$cancertype),fill=unique(mycol))
+```
+
+
+Apply an unsupervised clustering method to see how samples cluster together.  
+For example, using PCA:
+```{r}
+library(ggplot2)
+mypca=prcomp(log2(finalmetab),center=T,scale=T)
+percvar=round((mypca$sdev)^2 / sum(mypca$sdev^2)*100,2)
+# Check that order of mypca matrix is same as sample matrix:
+all.equal(rownames(mypca$x),rownames(finalmetab))
+	
+mydf=data.frame(PC1=mypca$x[,"PC1"],PC2=mypca$x[,"PC2"], 
+		Cell_Line=finannot$cell_line, Cancer_Type=finannot$cancertype)
+  
+	ggplot(mydf,aes(PC1,PC2,color=Cancer_Type)) + 
+		geom_point(size=7) +
+		scale_color_manual(values=unique(mycol)) +
+		xlab(paste0("PC1: ",percvar[1],"% variance")) +
+		ylab(paste0("PC2: ",percvar[2],"% variance")) +
+		theme_bw() + 
+		ggtitle("Metabolomics PCA Plot \n log2(normalized values)") +
+  		theme(axis.line = element_line(colour = "black"),
+		axis.title=element_text(size=15,face="bold"),
+    	plot.title=element_text(size=20,face="bold"),
+		panel.grid.major = element_blank(),
+    	panel.grid.minor = element_blank(),
+    	panel.background = element_blank(),
+		legend.key=element_blank())
+```
+
+Try setting center=F and/or scale=F to see what happens.
+
+ 
+### 3.  Identify metabolites that are different between cancer types/cell lines
+
+First, do a t-test to compare breast and leukemia groups. First, you'll need to refilter by standard deviation, why?
+
+
+```{r}
+mysamples <- c(which(finannot$cancertype=="Breast"), which(finannot$cancertype=="Leukemia"))
+mygroups <- finannot$cancertype[mysamples]
+# Remove metabolites with sds == 0
+sds1 <- as.numeric(apply(finalmetab[which(finannot$cancertype=="Breast"),],2,sd))
+sds2 <- as.numeric(apply(finalmetab[which(finannot$cancertype=="Leukemia"),],2,sd))
+newmetab <- finalmetab[mysamples,intersect(which(sds1>0), which(sds2>0))]
+
+# Now calculate p-values and log fold changes
+	pval=c()
+	for (i in 1:ncol(newmetab)) {
+		temp=t.test(as.numeric(log2(newmetab[which(mygroups=="Leukemia"),i])),
+			log2(as.numeric(newmetab[which(mygroups=="Breast"),i])))
+			
+			pval=c(pval,temp$p.value)
+	}
+```
+
+One quick way to check if you have any significance, is to look at the distribution of the p-values.*
+```{r}
+	hist(pval,breaks=100)
+	abline(v=0.01,col='red')
+```
+
+Can you tell whether there will be significant altered metabolites?  How?
+
+```{r}
+	# Adjust p-values
+	pval.adj=p.adjust(pval,method='fdr')
+	
+	# Calculate fold changes
+	fc=c()
+	for (i in 1:ncol(newmetab)) {
+		mean1=mean(as.numeric(newmetab[which(mygroups=="Leukemia"),i]))
+		mean2=mean(as.numeric(newmetab[which(mygroups=="Breast"),i]))
+		fc=c(fc,mean1/mean2)
+	}
+range(pval.adj)
+range(fc)
+```
+
+
+Draw a volcano plot
+```{r}
+  plot(log2(fc),-log10(pval.adj),pch=19,xlab="log2(FC) - Leukemia/Breast",
+		main="Volcano Plot\nComparing Leukemia and Breast")
+# Draw lines to show adjusted p-value cutoff of 0.05, and fold changes < 0.5 or > 1.5
+	abline(h=-log10(0.05),col='red')
+	abline(v=c(log2(0.5),log2(1.5)),col='blue')
+	
+	# Color significan metabolites
+	mysigs=intersect(c(which(fc>1.5),which(fc<0.5)),which(pval.adj<0.05))
+	points(log2(fc[mysigs]),-log10(pval.adj[mysigs]),col="salmon",pch=19)
+```
+
+
+**QUESTIONS**:
+
+1. How many metabolites are significant based on your criteria (define your criteria)?
+2. What are the metabolite names with highest abundance in breast cancer cell lines?
+3. What are the metabolite names with highest abundance in leukemia cell lines?
+
+### 3. Assess correlation between genes and metabolites.
+
+In the manuscript, authors evaluate correlations between genes and metabolites using Pairwise Quadrant Correlations.  Let's give this is a try ourselves and look at the distribution of the results.  To do this on all the genes (17,987) and all metabolites (353), would result in 6,349,411.  That's a lot!  So let's only do this for a random set of 100 genes and all 353 metabolites.
+
+```{r}
+library(robcor)
+
+# Set the seed so results are reproducible.
+set.seed(1)
+mygenes <- sample(1:ncol(finalgenes),100)
+
+# Calculating pairwise quadrant correlations:
+mycorPQC <- matrix(ncol=ncol(finalmetab),nrow=100)
+rownames(mycorPQC) <- colnames(finalgenes)[mygenes]
+colnames(mycorPQC) <- colnames(finalmetab)
+genelog <- log2(finalgenes)
+metablog <- log2(finalmetab)
+for (i in 1:length(mygenes)) {
+  #print(i)
+# We can use the robcor() function here to use pairwise quadrant correlations
+  mycorPQC[i,] <- as.numeric(apply(metablog,2,function(x) 
+    robcor(x,genelog[,mygenes[i]],method="quadrant")))
+}
+
+# Let's also try to calculate Pearson's correlations to compare:
+mycorPear <- matrix(ncol=ncol(finalmetab),nrow=100)
+rownames(mycorPear) <- colnames(finalgenes)[mygenes]
+colnames(mycorPear) <- colnames(finalmetab)
+for (i in 1:length(mygenes)) {
+# We can use the robcor() function here to use pairwise quadrant correlations
+  mycorPear[i,] <- as.numeric(apply(metablog,2,function(x) 
+  cor(x,genelog[,mygenes[i]],method="pearson")))
+}
+
+range(mycorPQC,na.rm=T)
+range(mycorPear,na.rm=T)
+```
+
+Now we can plot the distributions of the results:
+
+```{r}
+par(mfrow=c(2,2))
+hist(mycorPQC,main="Pairwise Quadrant Correlations",breaks=50)
+hist(mycorPear, main="Pearson's Correlations", breaks=50)
+plot(mycorPQC,mycorPear)
+```
+
+To find out which pairs have the highest correlation (e.g. 1):
+
+```{r}
+head(which(mycorPQC==1,arr.ind=T))
+
+rownames(mycorPQC)[43]
+colnames(mycorPQC)[61]
+```
+
+We can plot a pair to see:
+```{r}
+plot(genelog[,rownames(mycorPQC)[43]],metablog[,colnames(mycorPQC)[61]],
+                xlab=rownames(mycorPQC)[43],
+                ylab=colnames(mycorPQC)[61])
+```
+
+### 4.  Assess drug sensitivity.
+
+The cell lines have been treated with > 20,000 compounds.  A score has been calculated for each compound, IC-50, which represents the amount of the drug needed to inhibit biological activity by 50%.  The average IC-50 value for each cell line across all drugs was calculated and normalized into a z-score.  Based on this average z-score (drug score), cell lines are categorized as "Resistant", "Sensitive", or "No Response".
+
+Let's take a look at the data:
+
+```{r}
+table(finannot$drugcateg)
+
+hist(finannot$drugscore,breaks=50)
+
+range(finannot$drugscore[which(finannot$drugcateg=="Resistant")])
+range(finannot$drugscore[which(finannot$drugcateg=="No Response")])
+range(finannot$drugscore[which(finannot$drugcateg=="Sensitive")])
+```
+
+We could not look at associations between drugs and metabolite or gene levels. Let's use pairwise quadrant correlations which are more robust than Pearson's. For example:
+
+```{r} 
+library(robcor)
+
+# We can use the robcor() function here to use pairwise quadrant correlations
+mycorPQC <- as.numeric(apply(finalmetab,2,function(x) 
+  robcor(x,finannot$drugscore,method="quadrant")))
+
+# Let's also calculate Pearson's to compare:
+mycorPear <- as.numeric(apply(finalmetab,2,function(x) 
+  cor(x,finannot$drugscore,method="pearson")))
+
+range(mycorPQC)
+range(mycorPear)
+```
+
+Let's now mak some plots to look at these:
+
+```{r}
+par(mfrow=c(2,2))
+hist(mycorPQC, main="Pairwise Quadrant Correlation")
+hist(mycorPear, main="Pearson Correlation")
+plot(mycorPQC,mycorPear, xlab="PQC", ylab="Pearson Correlation", pch=19)
+```
+
+
+Printout of session info in RStudio as a good housekeeping practice.
+
+```{r}
+sessionInfo()
+```
