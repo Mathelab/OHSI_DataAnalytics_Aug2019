@@ -13,7 +13,7 @@ knitr::opts_chunk$set(message=FALSE,warning=FALSE,
 ```
 
 ### Goals:
-1.  Explore the structure of the data
+1.  Explore the structure of data
 2.  Assess the quality of the data
 3.  Identify metabolites that are different between cancer types or between cell lines with different drug responses.
 
@@ -30,6 +30,8 @@ Users can load an Rdata frame which contains three R objects:
 2. finalgenes: a matrix containing gene abundance values
 3. finannot: annotation (meta-data) of the samples where the column "cell_line" matches that of the metab matrix.
 
+You can also find all the data in an Excel sheet.
+
 ### Tips:
 * If you forget how a function is used in R, type "?function" to get more information
 * Ask questions!!!
@@ -39,7 +41,7 @@ Users can load an Rdata frame which contains three R objects:
 In R or Rstudio, load your data (make sure to change yoru directory appropriately to your working directory):
 
 ```{r}	
-load("/Users/math90/Documents/Teaching/Ethiopia/OHSI_DataAnalytics/Data/NCI60/CleanGeneMetab_NCI_60.Rdata")
+load("/Users/math90/Documents/Teaching/Ethiopia/OHSI_DataAnalytics_Aug2019/Data/NCI60/CleanGeneMetab_NCI_60.Rdata")
 ```
 
 Here are some key functions to explore the types of data you have.
@@ -77,8 +79,78 @@ head(finannot)
 How many types of cell lines are there?  How many types of cancers represented?
 ```{r}
 table(finannot$cell_line)
+
 length(unique(finannot$cell_line))
 table(finannot$cancertype)
+barplot(table(finannot$cancertype),
+        main="Cancer Types in NCI-60 Data",
+        names.arg=unique(finannot$cancertype),
+        ylab="Amount")
+
+```
+
+This barplot is not pretty, let's try again and relabel the x-axis:
+```{r}
+a=barplot(table(finannot$cancertype),
+        main="Cancer Types in NCI-60 Data", names.arg = "",horiz = F,
+        ylab="Amount",xpd=T,ylim=c(-1.5,10))
+text(a, -1, label=unique(finannot$cancertype),srt=45,offset=0, 
+     xpd=TRUE)
+```
+
+We could also order the cell lines by the numbr of different cancer types:
+```{r}
+toplot <- sort(table(finannot$cancertype))
+labels <- unique(finannot$cancertype)[order(table(finannot$cancertype))]
+a=barplot(toplot,
+        main="Cancer Types in NCI-60 Data", names.arg = "",horiz = F,
+        ylab="Amount",xpd=T,ylim=c(-1.5,10))
+text(a, -1, label=labels,srt=45,offset=0, 
+     xpd=TRUE)
+```
+
+
+We can now visualize our data that are continous:
+```{r}
+hist(finannot$drugscore, main="Distribution of Drug Score Data",
+     xlab="Drug Score")
+```
+
+While this gives us a good idea of how the drug scores are distributed, we could also order the drug score data, plot the actual values, and see how those values correspond to the categorical data.
+
+```{r}
+toplot <- sort(finannot$drugscore)
+mycol <- finannot$drugcateg[order(finannot$drugscore)]
+barplot(toplot,col=mycol)
+```
+
+We can also change the colors
+```{r}
+mycol <- gsub("Resistant","violet",mycol)
+mycol <- gsub("No Response","grey",mycol)
+mycol <- gsub("Sensitive","green",mycol)
+barplot(toplot,col=mycol)
+```
+
+And we should also add a legend and labels:
+```{r}
+a=barplot(toplot, col=mycol, main="Drug sensitivity of cell lines",
+        legend=c("Resistant","No Response","Sensitive"),
+        args.legend=list(x="bottomright",fill = c("violet","grey","green")))
+
+alllabels <- finannot$cell_line[order(finannot$drugscore)]
+toplot <- sort(finannot$drugscore)
+toptext <- as.matrix(a[which(toplot<0),])
+toplabel <- alllabels[which(toplot<0)]
+bottomtext <- as.matrix(a[which(toplot>0),])
+bottomlabel <- alllabels[which(toplot>0)]
+
+a=barplot(toplot, col=mycol, main="Drug sensitivity of cell lines",
+        legend=c("Resistant","No Response","Sensitive"),
+        args.legend=list(x="bottomright",fill = c("violet","grey","green")))
+
+text(toptext, 0.05, label=toplabel, srt=90,offset=0, pos=4,cex=0.5,adj=0)
+text(bottomtext, -0.05, label=bottomlabel, srt=90,offset=0, pos=2,cex=0.5)
 ```
 
 ### 2. Explore the structure of the data
@@ -112,7 +184,7 @@ hist(sds,breaks=1000,main="Distribution of metabolite abundance sds",xlim=c(0,10
 Do you notice more outliers?  What metabolites could you remove from further analysis?  How many are there?  What metabolite has a very high standard deviation?
 
 ```{r}
-bads=c(which(sds==0),which(sds>15))
+bads=c(which(sds==0),which(sds>6))
 length(bads)
 hist(sds[-bads])
 colnames(finalmetab)[which(sds>=10)]
@@ -345,7 +417,7 @@ range(mycorPQC)
 range(mycorPear)
 ```
 
-Let's now mak some plots to look at these:
+Let's now make some plots to look at these:
 
 ```{r}
 par(mfrow=c(2,2))
