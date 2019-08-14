@@ -1,0 +1,94 @@
+---
+title: "Test"
+author: "Ewy Mathe"
+date: "8/14/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Simulating a dataset
+```{r}
+set.seed(123)
+age <- rnorm(2000, mean = 60, sd = 10)
+length(age)
+range(age)
+sd(age)
+mean(age)
+```
+
+Now, let's visualize results with a boxplot and a histogram.
+
+```{r}
+par(mfrow=c(2,2))
+hist(age)
+hist(age, breaks=100)
+boxplot(age, main = "Boxplot of Age",
+        xlab = "Individuals", ylab = "Age")
+```
+
+Now let's create our variable for gender, with 800 "F" and 1200 "M"
+
+```{r}
+gender <- c(rep("F",800),rep("M",1200))
+set.seed(234)
+finalgender <- sample(gender, 2000, replace=F)
+table(finalgender)
+length(finalgender)
+head(finalgender)
+```
+
+Now let us work on creating a variable called location: 500 "LocA", 1,200 "LocB", 800 "LocC"
+
+```{r}
+set.seed(345)
+location <- c(rep("LocA",500),rep("LocB",1200), rep("LocC",300))
+table(location)
+finallocation <- sample(location, length(location), replace=FALSE) 
+table(finallocation)
+head(finallocation)
+```
+
+Lastly, create the variable "caco", that has 1,000 "Cases" and 1,000 "Controls"
+```{r}
+set.seed(456)
+caco <- c(rep("Cases", 1000), rep("Controls", 1000))
+table(caco)
+
+finalcaco <- sample(caco, length(caco), replace=FALSE) 
+table(finalcaco)
+head(finalcaco)
+```
+
+Now creating a data frame for my simultated data:
+```{r}
+mydata <- data.frame(age=age, caco=finalcaco,
+                     gender=finalgender, location=finallocation)
+summary(mydata)
+```
+
+Select a subset of 1,000 individuals, 500 cases and 500 controls, that have similar data distributions between the cases and controls.
+
+```{r}
+set.seed(5)
+myrows <- sample(1:nrow(mydata), 1000, replace=FALSE)
+
+subsetmydata <- mydata[myrows,]
+hist(subsetmydata[,"age"],breaks=100)
+
+cases <- subsetmydata[which(subsetmydata$caco == "Cases"),]
+controls <- subsetmydata[which(subsetmydata$caco == "Controls"),]
+```
+
+Let's check that the distributions are the same in cases and controls:
+```{r}
+summary(cases)
+summary(controls)
+```
+
+Be a good R citizen:
+```{r}
+sessionInfo()
+```

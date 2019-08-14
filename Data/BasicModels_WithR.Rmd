@@ -1,0 +1,256 @@
+---
+title: "Basic Models with R"
+author: "Ewy Mathé"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r,echo=FALSE}
+knitr::opts_chunk$set(message=FALSE,warning=FALSE, 
+                      fig.height=10,fig.width = 12,
+                      fig.fullwidth = TRUE,
+                      echo=TRUE,tidy=TRUE)
+```
+
+### Goal:
+Code basic models in R
+
+### Requirements:
+1. R or Rstudio
+2. Packages: 
+
+### Input Data:
+Users can load an Rdata frame which contains three R objects:
+
+1. finalmetab: a matrix containing metabolite abundance values.
+2. finalgenes: a matrix containing gene abundance values
+3. finannot: annotation (meta-data) of the samples where the column "cell_line" matches that of the metab matrix.
+
+You can also find all the data in an Excel sheet.
+
+### Tips:
+* If you forget how a function is used in R, type "?function" to get more information
+* Ask questions!!!
+
+## Load Data and Take a Look
+
+```{r}
+load("/Users/math90/Documents/Teaching/Ethiopia/OHSI_DataAnalytics_Aug2019/Data/NCI60/CleanGeneMetab_NCI_60.Rdata")
+
+# Look at what objects are in your data:
+ls()
+
+# Look at the dimensions of each:
+dim(finalgenes)
+dim(finalmetab)
+dim(finannot)
+dim(smallmetab)
+```
+
+What information is available for each cell line?
+What is the summary for each type of variable?
+What is the size of each data frame?  What's in the rows and columns?
+
+```{r}
+head(finannot)
+summary(finannot)
+```
+
+Double check (you should always do this!) that the IDs in your sample meta data (finannot) match those of the abundance dta (finalgenes, finalmetab)
+
+```{r}
+all.equal(rownames(finalgenes), finannot$cell_line)
+
+# so that didn't work because finalgenes is a matrix and finannot is a data frame
+all.equal(rownames(finalgenes), as.character(finannot$cell_line))
+all.equal(rownames(finalmetab), as.character(finannot$cell_line))
+```
+
+Should we log our data?
+It's best to have our samples as columns for much of the plotting so let's take the transpose first.  
+
+```{r}
+set.seed(1)
+finalmetab <- t(finalmetab)
+finalgenes <- t(finalgenes)
+
+par(mfrow=c(2,2))
+boxplot(as.data.frame(finalmetab),main="Histogram of Metabolomic Data")
+boxplot(as.data.frame(log2(finalmetab)),
+        main="Histogram of LOG Metabolomic Data")
+boxplot(as.data.frame(finalgenes),
+        main="Histogram of Gene Expression Data")
+boxplot(as.data.frame(log2(finalgenes)),
+        main="Histogram of LOG Gene Expression Data")
+
+finalgenes <- log2(finalgenes)
+finalmetab <- log2(finalmetab)
+```
+
+
+
+You should be familiar with this data, if not, look at the file "NCI60_HandsOn.html"
+
+## Running a linear model, looking for the association between a gene and drug score.
+
+Let's try this on one gene, let's randomly pick a gene, and run a linear model to look at the association between the drug score and that gene.
+
+First, let's pick a gene and look at its distribution.
+
+```{r}
+set.seed(1)
+gene.index <- sample(1:ncol(finalgenes),1)
+mygene <- finalgenes[gene.index,]
+boxplot(mygene,main=rownames(finalgenes)[gene.index])
+```
+
+Now that we have a gene, let's run a linear model to look at the association between that gene and drug response score.
+
+```{r}
+mylm <- glm(mygene ~ finannot$drugscore, family = "gaussian")
+mylm
+summary(mylm)
+plot(mylm)
+
+# Code to get coefficients:
+summary(mylm)$coefficients[,"Estimate"]
+summary(mylm)$coefficients["finannot$drugscore","Estimate"]
+
+# Code to get p-values:
+summary(mylm)$coefficients[,"Pr(>|t|)"]
+summary(mylm)$coefficients["finannot$drugscore","Pr(>|t|)"]
+```
+
+Note that linear models are __not__ reversible!  If you switch the outcome and the covariables, you will not get the same answer!!
+
+Let's take a look:
+```{r}
+flipmylm <- glm(finannot$drugscore ~ mygene, family = "gaussian")
+flipmylm
+summary(flipmylm)$coefficients
+summary(mylm)$coefficients
+```
+
+Are there any potential confounders?  Let's go ahead and take those into account.
+
+```{r}
+mylm2 <- glm(mygene ~finannot$drugscore +
+              finannot$cancertype, family = "gaussian")
+mylm2
+summary(mylm2)
+plot(mylm2)
+
+# Code to get coefficients:
+summary(mylm2)$coefficients[,"Estimate"]
+summary(mylm2)$coefficients["finannot$drugscore","Estimate"]
+
+# Code to get p-values:
+summary(mylm2)$coefficients[,"Pr(>|t|)"]
+summary(mylm2)$coefficients["finannot$drugscore","Pr(>|t|)"]
+```
+
+
+## Running an ANOVA/ANCOVA, looking for the association between a gene and drug category.
+
+We can use the same gene as we did above here.  Let's run an ANOVA to look for the association between the gene abundance level, and the drug category
+
+```{r}
+myanova <- aov(mygene ~ finannot$drugcateg)
+summary(myanova)
+
+# Here's how to get the p-value:
+summary(myanova)[[1]]["finannot$drugcateg","Pr(>F)"]
+```
+
+Now, we know that there is indeed a difference in expression value of the gene associated with drug category.  But we have 3 drug categories, so where is the difference?  Between Resistant and No Response?  Between Sensitive and No Response?  Or between Sensitive and Resistant?  For this, we are going to calculate the Tukey Honest Significance Differences, which takes into account multiple comparisons.
+
+```{r}
+mytukey <- TukeyHSD(myanova)
+
+# To get the p-values for each group (you would replace 'finannot$drugcateg' by the name of your category:
+mytukey$`finannot$drugcateg`[,"p adj"]
+```
+
+We know that cancer type could be a confounding variable that could impact the association of the gene and the drug category, let's run an ANCOVA and adjust for cancer type.
+
+```{r}
+myanova2 <- aov(mygene ~ finannot$drugcateg + 
+                 finannot$cancertype)
+summary(myanova2)
+
+# Here's how to get the p-value:
+summary(myanova2)[[1]]["finannot$drugcateg","Pr(>F)"]
+
+# Now Tukey:
+mytukey2 <- TukeyHSD(myanova)
+
+# To get the p-values for each group (you would replace 'finannot$drugcateg' by the name of your category:
+mytukey2$`finannot$drugcateg`[,"p adj"]
+```
+
+How does these results compare to the linear models that use drug as a continuous variable, not a categorical variable?
+
+## Logistic Regression
+
+In some cases, you may have a dichotomous variable, and you wish to see the association of this dichotomous variable with an outcome.
+
+In our case, we could dichotomize the gene levels into two categories, "hi" and "low", where "hi" cell lines have abundance values greater than the mean.  Let's give it a try:
+
+```{r}
+genemean <- mean(mygene)
+genecateg <- mygene
+genecateg [which(mygene<genemean)]="low"
+genecateg [which(mygene>=genemean)]="hi"
+table(genecateg)
+```
+
+__Important__: you need to make sure that your categories are factors or else your model won't work.  The reference sample is determined by alpha-numerical order (in this case, "hi").  There are ways to change this though:
+
+```{r}
+genecateg <- as.factor(genecateg)
+levels(genecateg)
+genecateg <- relevel(genecateg, ref="low")
+levels(genecateg)
+```
+
+We can use the glm() function (generalized linear models function) again but specify that we want to run a logistic model:
+
+```{r}
+mylogit <- glm(genecateg ~ finannot$drugscore, 
+            family=binomial(link = "logit"))
+mylogit
+summary(mylogit)
+plot(mylogit)
+
+# Code to get coefficients:
+summary(mylogit)$coefficients[,"Estimate"]
+summary(mylogit)$coefficients["finannot$drugscore","Estimate"]
+
+# Code to get p-values:
+summary(mylogit)$coefficients[,"Pr(>|z|)"]
+summary(mylogit)$coefficients["finannot$drugscore","Pr(>|z|)"]
+```
+
+Again, we can adjust for the effect of cancer type:
+```{r}
+mylogit2 <- glm(genecateg ~ finannot$drugscore +
+                 finannot$cancertype,
+            family=binomial(link = "logit"))
+mylogit2
+summary(mylogit2)
+plot(mylogit2)
+
+# Code to get coefficients:
+summary(mylogit2)$coefficients[,"Estimate"]
+summary(mylogit2)$coefficients["finannot$drugscore","Estimate"]
+
+# Code to get p-values:
+summary(mylogit2)$coefficients[,"Pr(>|z|)"]
+summary(mylogit2)$coefficients["finannot$drugscore","Pr(>|z|)"]
+```
+
+Is this what you would expect?  Is it better to dichotomize your outcome or keep the values as continuous?
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,225 @@
+---
+title: Sampling and Power
+author: "Ewy Mathé"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r,echo=FALSE}
+knitr::opts_chunk$set(message=FALSE,warning=FALSE, 
+                      fig.height=10,fig.width = 12,
+                      fig.fullwidth = TRUE,
+                      echo=TRUE,tidy=TRUE)
+```
+
+### Goals:
+1.  Explore data sampling using simulated data
+2.  Calculate power 
+
+### Requirements:
+R or Rstudio
+
+### Input Data:
+There is no data here as we are going to simulate data.
+
+### Tips:
+* If you forget how a function is used in R, type "?function" to get more information
+* Ask questions!!!
+
+### 1. Simulating data
+
+We have discussed various sampling methods in class and will not see how to perform sampling in R.
+
+Consider that you have a population of 2,000 individuals that were enrolled in a case-control study.  The goal of the study is to identify potential biomarkers of disease, by comparing cases (disease) and controls. 
+
+The following characteristics could have a bias on study results: age, gender. location.  The 2,000 individuals enrolled in the study have the following characteristics for these particular biases:
+
+1. __age__ : mean = 60, standard deviation = 10
+2. __gender__ : 40% female, 60% male
+3. __location__: 25% individuals are from location A, 60% from location B, and 15% from location C
+4. __group__: 50% are cases, and 50% are controls
+
+Let's go ahead an simuluate such a population of individuals.  First, let's simulate the age of these individuals, assuming that is normally distributed (Gaussian distribution), with a mean of 60 and a standard deviation of 10.
+
+```{r}
+set.seed(123)
+age <- rnorm(2000, mean = 60, sd = 10)
+```
+
+Let's check visually and statistically that our data is as expected:
+
+```{r}
+hist(age,breaks=100)
+sd(age)
+```
+
+Now let's tackle age (40% female and 60% male). We can create a vector with 800 females (40%) and 1,200 males (60%), and then randomize the order of that vector.
+
+```{r} 
+set.seed(234)
+gender <- c(rep("F",800),rep("M",1200))
+gender <- sample(gender,2000, replace = FALSE)
+```
+
+Check what you've done:
+```{r}
+table(gender)
+head(gender,10)
+tail(gender,10)
+```
+
+We can use a similar process for location, where we have 500 (25%) individuals from location A, 1,200 (60%) from location B, and 300 (15%) from location C.
+
+```{r}
+set.seed(345)
+location <- c(rep("LocA",500),rep("LocB",1200), rep("LocC",300))
+location <- sample(location, 2000, replace=FALSE)
+```
+
+Let's check
+```{r}
+table(location)
+head(location,10)
+tail(location,10)
+```
+
+
+And finally, let's simulated our 1,000 (50%) cases and 1,000 (50%) controls.  
+```{r}
+set.seed(456)
+caco <- c(rep("Cases",1000),rep("Controls",1000))
+caco <- sample(caco,2000, replace = FALSE)
+table(caco)
+head(caco)
+tail(caco)
+```
+
+We can now put all these variables together and created our simulated dataset.
+```{r}
+studydata <- data.frame(age=age, gender=gender, location=location, caco=caco)
+head(studydata)
+head(table(studydata))
+summary(studydata)
+summary(studydata[which(studydata$caco=="Controls"),])
+summary(studydata[which(studydata$caco=="Cases"),])
+```
+
+Discussion: Is the distribution of our variables in Cases and Controls similar?
+
+### 2. Study Design 1
+
+From this population of 2,000 individuals that we just simulated, we have resources to run a metabolomics analysis on 1,000 individuals.  After much thought of how we want to design this study, we want keep the distributions of the variables as they are originally in or study population:
+1. 60% males, 40% females
+2. 25% locA, 60% locB, and 15% locC
+3. mean age = 60, sd = 10
+
+We also want to have 500 (50%) cases and 500 (50%) controls.
+
+Theoretically, if we randomly select from our original population, we would meet this criteria.  Do you agree?  Let's try:
+
+```{r}
+cases <- studydata[which(studydata$caco=="Cases"),]
+controls <- studydata[which(studydata$caco=="Controls"),]
+
+mysamples <- rbind(cases[sample(1:nrow(cases),500),], 
+                   controls[sample(1:nrow(controls),500),])
+dim(mysamples)
+```
+
+Now we can check:
+```{r} 
+summary(mysamples)
+summary(mysamples[which(mysamples$caco=="Controls"),])
+summary(mysamples[which(mysamples$caco=="Cases"),])
+```
+
+We can also check statistically:
+```{r}
+
+t.test(mysamples[which(mysamples$caco=="Cases"), "age"],mysamples[which(mysamples$caco=="Controls"), "age"])
+
+table(studydata$gender[which(studydata$caco=="Controls")])
+table(studydata$gender[which(studydata$caco=="Cases")])
+
+fisher.test(matrix(c(398,602,402,598),nrow=2))
+
+table(studydata$location[which(studydata$caco=="Controls")])
+table(studydata$location[which(studydata$caco=="Cases")])
+
+mycontingency <- matrix(c(255,245,608,592,137,163),nrow=2)
+colnames(mycontingency)=c("LocA","LocB","Loc")
+rownames(mycontingency)=c("Controls","Cases")
+mycontingency
+fisher.test(mycontingency)
+```
+1. balanced gender (50% males/50% females in both cases and controls)
+2. balanced location (33% locA/33% locB/33% locC in both cases and controls)
+3. balanced age (mean of 60 in both cases and controls)
+
+### Sample size Calculations
+
+The package (pwr) is required to do sample calculations.
+
+```{r}
+if (!require(pwr)) {
+  install.packages("pwr")
+  library(pwr)
+}
+```
+
+This R package has several functions that allow you to calculate power or sample size:
+1. pwr.anova.test: if you're doing an anova
+2. pwr.r.test: if you're doing a correlation
+3. pwr.t.test: if you're dong a t-test
+4. pwr.2p.test: if you're doing a proportion test
+
+Please see this webpage for more information <https://www.statmethods.net/stats/power.html>
+
+For all these functions, the input parameters are typically:
+- n: the number of observations
+- effect size (e.g. linear correlation coefficient, )
+- signigicant level (Type I error probability, e.g. 0.05)
+- power
+- alternative: "two-sided" (default); "greater" or "less" for two-sided
+
+_You must set one of the parameters to NULL if you want the function to calculate that parameter_
+
+Let's try to calculate the power when you are comparing the association of 40 observations with a categorial outcome of 5 groups using ANOVA, a Type I error probability of 0.05, and an effect size of 0.25.
+
+```{r}
+pwr.anova.test(f = 0.25, k = 5, n = 40, sig.level=0.05, 
+               power=NULL)
+```
+
+If I want to calculate the number of samples I need to achieve a power of 0.95:
+
+```{r}
+pwr.anova.test(f = 0.25, k = 5, n = NULL, sig.level=0.05, 
+               power=0.95)
+```
+
+What if you want to test many different levels of power and see what the number of samples required is?
+
+```{r}
+powers <- seq(0.4,0.9,0.1)
+num <- c()
+for (i in 1:length(powers)) {
+  temp <- pwr.anova.test(f = 0.25, k = 5, n = NULL, sig.level=0.05, 
+               power=powers[i])$n
+  num <- c(num, temp)
+}
+
+b <- barplot(num, ylab="Predicted Sample\nNumber", 
+             xlab="Power", ylim=c(0,60),
+        main="Predicted Number of Samples vs Power")
+text(b, -2, label=powers,srt=45,offset=0, 
+     xpd=TRUE)
+text(b, (num+5), label=round(num,0), xpd=TRUE,cex=0.8)
+```
+
+
+As a good R citizen:
+
+```{r}
+sessionInfo()
+```
