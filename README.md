@@ -13,3 +13,5 @@ This course is an introduction to principles of data analysis, including data cl
 
 All course materials will be placed here.  __See the document OHSI_EpiDataAnalytics_Aug_2019.docx for more details.__
 
+Note that the Data/ folder also contains the Rmd and html data files for the code.
+
